@@ -88,22 +88,23 @@ def get_dyndns_config():
     ddns_service_start_index = r.text.find('var ddns_config') + 19
     ddns_service_code = r.text[ddns_service_start_index:ddns_service_start_index+1]
     ddns_service = service_codes[int(ddns_service_code)]
+    ddns_enabled = r.text[r.text.find('"SELECTED" == "SELECTED"'):].find("true") != -1
     ddns_hostname = tree.xpath("//input[@name='RgDDnsHostName']")[0].value
     ddns_username = tree.xpath("//input[@name='RgDDnsUserName']")[0].value
     ddns_password = tree.xpath("//input[@name='RgDDnsPassword']")[0].value
     ddns_status_start_index = r.text.find('RgDDnsStatus").innerHTML') + 26
     ddns_status_end_index = ddns_status_start_index + r.text[ddns_status_start_index:].find('";')
     ddns_status = r.text[ddns_status_start_index:ddns_status_end_index]
-    return (ddns_service, ddns_hostname, ddns_username, ddns_password, ddns_status)
+    return {"enabled": ddns_enabled, "service": ddns_service, "hostname": ddns_hostname, "username": ddns_username, "password": ddns_password, "status": ddns_status}
 
-def set_dyndns_config(state, service_code, hostname, username, password):
+def set_dyndns_config(dyndns_config):
     service_codes = ["", "www.DynDNS.com", "www.dtDNS.com", "www.noip.com", "www.opendns.com"]
     sessionKey = get_SessionKey("http://192.168.0.1/reseau-pb4-dydns.html")
     if sessionKey == -1:
         return -1
     r = requests.post("http://192.168.0.1/goform/WebUiDDns?sessionKey={}".format(sessionKey),
-                      data={"RgDDnsListDynDNSSelected": state, "RgDdnsService": service_codes[service_code],
-                            "RgDDnsHostName": hostname, "RgDDnsUserName": username, "RgDDnsPassword": password},
+                      data={"RgDDnsListDynDNSSelected": "1" if dyndns_config["enabled"] else "0", "RgDdnsService": dyndns_config["service"],
+                            "RgDDnsHostName": dyndns_config["hostname"], "RgDDnsUserName": dyndns_config["username"], "RgDDnsPassword": dyndns_config["password"]},
                       allow_redirects=False,
                       headers={"Referer": "http://192.168.0.1/reseau-pb4-dydns.html", "Origin": "http://192.168.0.1"})
     if r.status_code != 302 or r.headers['Location'] != "http://192.168.0.1/reseau-pb4-dydns.html":
@@ -118,6 +119,7 @@ def get_port_forwarding_rules():
     tree = html.fromstring(port_frwd_list)
     elements = tree.getchildren()
     port_forwarding_list = []
+    num = 0
     while len(elements) != 0:
         name = elements.pop(0).text
         ip = elements.pop(0).text
@@ -131,16 +133,43 @@ def get_port_forwarding_rules():
         else:
             proto = "Both"
         tenable = elements.pop(0).text
-        if name is None:
-            break
-        port_forwarding_list.append((name, ip, ext_port, int_port, proto))
+        num += 1
+        if name is not None:
+            port_forwarding_list.append({"num": num, "name": name, "ip": ip, "external_port": ext_port, "internal_port": int_port, "protocol": proto})
     return port_forwarding_list
 
-def add_port_forwarding_rule():
-    pass
+def add_port_forwarding_rule(num, name, external_port, internal_port, protocol, dest_ip):
+    sessionKey = get_SessionKey("http://192.168.0.1/reseau-pa8-transfertdeports.html")
+    if sessionKey == -1:
+        return -1
+    data = {"RgPortForwardName0{}".format(num): name, "RgPortForwardPortStart0{}".format(num): external_port, "RgPortForwardPortEnd0{}".format(num): internal_port,
+            "RgPortForwardEnable0{}".format(num): "1", "RgPortForwardIpAddr030{}".format(num): dest_ip, "RgPortForwardConfig": "Add", "RgPortForwardAction": "1"}
+    if protocol == "TCP":
+        data["RgPortForwardProtocol0{}".format(num)] = "4"
+    elif protocol == "UDP":
+        data["RgPortForwardProtocol0{}".format(num)] = "3"
+    else:
+        data["RgPortForwardProtocol0{}".format(num)] = "254"
+    r = requests.post("http://192.168.0.1/goform/WebUiRgPortForward?sessionKey={}".format(sessionKey),
+                      data=data,
+                      allow_redirects=False,
+                      headers={"Referer": "http://192.168.0.1/reseau-pa8-transfertdeports.html", "Origin": "http://192.168.0.1"})
+    if r.status_code != 302 or r.headers['Location'] != "http://192.168.0.1/reseau-pa8-transfertdeports.html":
+        return -1
+    return 0
 
-def del_port_forwarding_rule():
-    pass
+def del_port_forwarding_rule(num):
+    sessionKey = get_SessionKey("http://192.168.0.1/reseau-pa8-transfertdeports.html")
+    if sessionKey == -1:
+        return -1
+    data = {"RgPortForwardEnable0{}".format(num): "0", "RgPortForwardConfig": "Delete", "RgPortForwardAction": "2"}
+    r = requests.post("http://192.168.0.1/goform/WebUiRgPortForward?sessionKey={}".format(sessionKey),
+                      data=data,
+                      allow_redirects=False,
+                      headers={"Referer": "http://192.168.0.1/reseau-pa8-transfertdeports.html", "Origin": "http://192.168.0.1"})
+    if r.status_code != 302 or r.headers['Location'] != "http://192.168.0.1/reseau-pa8-transfertdeports.html":
+        return -1
+    return 0
 
 def get_wifi_config():
     r = requests.get("http://192.168.0.1/wifi.html")
@@ -207,11 +236,19 @@ def get_mac_filtering_config():
     pass
 
 authenticate(password="secret")
-wifi_guest_config = get_wifi_guest_config()
-print(wifi_guest_config)
-wifi_guest_config["enabled"] = not wifi_guest_config["enabled"]
-print(wifi_guest_config)
-set_wifi_guest_config(wifi_guest_config)
-print(get_wifi_guest_config())
+prt_frw_rules = get_port_forwarding_rules()
+print(prt_frw_rules)
+
+add_port_forwarding_rule(len(prt_frw_rules)+1, "test", 28, 28, "TCP", 200)
+add_port_forwarding_rule(len(prt_frw_rules)+2, "test2", 281, 281, "TCP", 200)
+add_port_forwarding_rule(len(prt_frw_rules)+3, "test3", 282, 282, "TCP", 200)
+add_port_forwarding_rule(len(prt_frw_rules)+4, "test4", 283, 283, "TCP", 200)
+prt_frw_rules = get_port_forwarding_rules()
+print(prt_frw_rules)
+
+while True:
+    pdb.set_trace()
+    prt_frw_rules = get_port_forwarding_rules()
+    print(prt_frw_rules)
 #logout()
 
