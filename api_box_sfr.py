@@ -26,6 +26,17 @@ def authenticate(password, username="admin"):
 def logout():
     r = requests.get("http://192.168.0.1/logout.html")
 
+def reboot_gateway():
+    sessionKey = get_SessionKey("http://192.168.0.1/config.html")
+    if sessionKey == -1:
+        return -1
+    r = requests.post("http://192.168.0.1/goform/WebUiOnlyReboot?sessionKey={}".format(sessionKey),
+                      data={},
+                      headers={"Referer": "http://192.168.0.1/config.html", "Origin": "http://192.168.0.1"})
+    if r.status_code != 200:
+        return -1
+    return 0
+
 #def led(status=True):
 #    sessionKey = get_SessionKey("http://192.168.0.1/config.html")
 #    if sessionKey == -1:
@@ -238,17 +249,5 @@ def get_mac_filtering_config():
 authenticate(password="secret")
 prt_frw_rules = get_port_forwarding_rules()
 print(prt_frw_rules)
-
-add_port_forwarding_rule(len(prt_frw_rules)+1, "test", 28, 28, "TCP", 200)
-add_port_forwarding_rule(len(prt_frw_rules)+2, "test2", 281, 281, "TCP", 200)
-add_port_forwarding_rule(len(prt_frw_rules)+3, "test3", 282, 282, "TCP", 200)
-add_port_forwarding_rule(len(prt_frw_rules)+4, "test4", 283, 283, "TCP", 200)
-prt_frw_rules = get_port_forwarding_rules()
-print(prt_frw_rules)
-
-while True:
-    pdb.set_trace()
-    prt_frw_rules = get_port_forwarding_rules()
-    print(prt_frw_rules)
-#logout()
+logout()
 
