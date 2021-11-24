@@ -1,7 +1,6 @@
 import requests
 import json
 from lxml import html
-import pdb
 
 class SFRBox:
     def __init__(self, ip="192.168.0.1"):
@@ -253,9 +252,10 @@ class SFRBox:
     def get_mac_filtering_config(self):
         pass
 
-box = SFRBox()
-box.authenticate(password="secret")
-prt_frw_rules = box.get_port_forwarding_rules()
-print(prt_frw_rules)
-#box.logout()
+if "__name__" == "__main__":
+    box = SFRBox()
+    box.authenticate(password="secret")
+    prt_frw_rules = box.get_port_forwarding_rules()
+    print(prt_frw_rules)
+    box.logout()
 
